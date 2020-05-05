@@ -1,12 +1,22 @@
 {% extends "myapp/base.html" %}
 {% block title %}Liste des Categories {% endblock %}
 {% block content %}
-    <h2>Categories :</h2>
-    <ul>
-    {% for category in categories %}
-        <li>{{category.label}} a le code {{category.code}} et comme parent {{category.parent_id}} </li>
-    {% empty %}
-        <p class="empty">Pas de categories pour le moment.</p>
-    {% endfor %}
-    </ul>
+<h2>Categories :</h2>
+{% load mptt_tags %}
+{% if categories|length > 0 %}
+<ul>
+    {% recursetree categories %}
+    <li>
+        {{ node.label }}
+        {% if not node.is_leaf_node %}
+        <ul class="children">
+            {{ children }}
+        </ul>
+        {% endif %}
+    </li>
+    {% endrecursetree %}
+</ul>
+{% else %}
+<p>Pas de categories à afficher</p>
+{% endif %}
 {% endblock %}

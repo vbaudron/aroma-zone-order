@@ -1,12 +1,15 @@
-{% extends "base.html" %}
-{% block title %}Produit {{id_product}} {% endblock %}
+{% extends "myapp/base.html" %}
+{% block title %}Produit {{product.label}} {% endblock %}
 {% block content %}
-    <h2>Produit {{id_product]}</h2>
-    <p>
-       Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec rhoncus 
-       massa non tortor. Vestibulum diam diam, posuere in viverra in, 
-       ullamcorper et libero. Donec eget libero quis risus congue imperdiet ac 
-       id lectus. Nam euismod cursus arcu, et consequat libero ullamcorper sit 
-       amet.
-    </p>
+    <h2>{{product.label}}</h2>
+    <p>category : {{product.category.label}}</p>
+    <p><a href={{product.url}}>url</a></p>
+    <p>PACKAGING</p>
+    <ul>
+    {% for packaging in packagings %}
+        <li>{{ packaging.quantity }} {{ packaging.measurement_unit.name }} : {{ packaging.price }} Euros</li>
+    {% empty %}
+        <p class="empty">Cette recette ne contient pas d'ingrédients pour le moment.</p>
+	{% endfor %}
+	</ul>
 {% endblock %}

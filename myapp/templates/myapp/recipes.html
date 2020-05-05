@@ -4,7 +4,7 @@
     <h2>Recettes :</h2>
     <ul>
     {% for recipe in recipes %}
-        <li>{{recipe.name}}</li>
+        <li><a href="{% url 'view_recipe' id_recipe=recipe.id %}">{{recipe.label}}</a></li>
     {% empty %}
         <p class="empty">Pas de recettes pour le moment.</p>
     {% endfor %}

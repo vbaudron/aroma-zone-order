@@ -1,0 +1,12 @@
+{% extends "myapp/base.html" %}
+{% block title %}Liste des Produits {% endblock %}
+{% block content %}
+    <h2>Produits :</h2>
+    <ul>
+    {% for product in products %}
+        <li><a href="{% url 'view_product' id_product=product.id %}">{{product.label}}</a></li>
+    {% empty %}
+        <p class="empty">Pas de produit pour le moment.</p>
+    {% endfor %}
+    </ul>
+{% endblock %}

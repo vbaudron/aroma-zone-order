@@ -1,4 +1,8 @@
+import logging as log
+from abc import ABC
+
 from django.db import models
+from mptt.models import MPTTModel, TreeForeignKey
 from django.contrib.auth.models import User
 from enum import auto, Flag, unique, Enum
 
@@ -11,7 +15,7 @@ from enum import auto, Flag, unique, Enum
 # MeasurementUnit
 # ---------------
 
-@unique
+
 class MeasurementUnit(models.IntegerChoices):
     NONE = 0
     ML = auto()
@@ -26,14 +30,76 @@ MEASUREMENT_UNIT_LEN_MAX = 6
 # Category
 # --------
 
-class   CategoryChoice(models.IntegerChoices):
-    # CAT 1
+class FunctionnalCategoryChoice(models.IntegerChoices):
+    # -- PARENT --
+    INGREDIENT_COSMETIQUE = auto()
+    # elem
+    HUILE_BEURRE_VEGETAL = auto()
+    ## children
+    HUILE_VEGETALE = auto()
+    BEURRE_VETEAL = auto()
+    MACREAT_HUILEUX = auto()
+    # elem (re)
+    HYDROLAT = auto()
+    HUILE_ESSENTIELLE = auto()
+    ACTIF_COSMETIQUE = auto()
+    POUDRE_PLANTE = auto()
+    EXTRAIT_PLANTE = auto()
+    FRAGRANCE_NATURELLE = auto()
+    EXFOLIANT_NATUREL = auto()
+    ARGILE = auto()
+    COLORANT = auto()
+    EMOLIENT = auto()
+    AGENT_DE_TEXTURE = auto()
+    ## children
+    CIRE = auto()
+    GOMME = auto()
+    ALCOOL_GRAS = auto()
+    # elem (re)
+    TENSIOACTIF = auto()
+    EMULSIFIANT = auto()
+    CONSERVATEUR = auto()
+    ANTIOXYDANT = auto()
+    AJUSTATEUR_PH = auto()
+    # ---
+    BASE_NEUTRE = auto()
+
+    # -- PARENT --
+    CONTAINER = auto()
+    # elem
+    POT = auto()
+    FLACON = auto()
+
+    # -- PARENT --
+    MATERIEL_FABRICATION = auto()
+    # elem
+    MATERIEL_DOSAGE_TRANSFERT = auto()
+    MATERIEL_MELANGE = auto()
+    MATERIEL_MAQUILLAGE = auto()
+
+# UNUSED
+class   MenuCategoryChoice(models.IntegerChoices):
+    # -- CAT 1 --
+    EXTRAIT_NATUREL = auto()
+    # elem
+    HUILE_ESSENTIELLE = auto()
+    ABSOLUE = auto()
+    EXTRAIT_CO2 = auto()
+    HYDROLAT = auto()
+    HUILE_VEGETALE = auto()
+    BEURRE_VEGETAUX = auto()
+    GET_ALOE_VERA = auto()
+    EXTRAIT_PLANTE_LIQUIDE = auto()
+    EXTRAIT_RUCHE = auto()
+    EXTRAIT_MARIN = auto()
+    VINAIGRE_NATUREL = auto()
+    ARGILE = auto()
+    SEL = auto()
+
+    # -- CAT 2 --
     INGREDIENT_COSMETIQUE = auto()
     # elem
     ACTIF_COSMETIQUE = auto()
-    HUILE_VEGETALE = auto()
-    HYDROLAT = auto()
-    HUILE_ESSENTIELLE = auto()
     CIRE_GOMME = auto()
     EMULSIFIANT_EPAISSISSANT = auto()
     AJUSTATEUR_PH = auto()
@@ -45,28 +111,37 @@ class   CategoryChoice(models.IntegerChoices):
     SAVON_GLYCERINE = auto()
     AGENT_MULTI_USE = auto()
 
-    # CAT 2
+    # -- CAT 3 --
     CONTAINER = auto()
-    # -- elem --
+    # elem
     POT = auto()
     FLACON = auto()
 
-    # CAT 3
+    # -- CAT 4 --
     MATERIEL_FABRICATION = auto()
-    # -- elem --
+    # elem
     MATERIEL_DOSAGE_TRANSFERT = auto()
     MATERIEL_MELANGE = auto()
     MATERIEL_MAQUILLAGE = auto()
 
+    # -- CAT 5 --
+    COSMETIQUE_NATUREL_BIO = auto()
+    # elem
+    SOIN_CORPS_VISAGE_BIO = auto()
+    SOIN_CHEVEUX_BIO = auto()
+    SOIN_LAVANT_DEO_BIO = auto()
+    MAQUILLAGE_BIO = auto()
+    BASE_NEUTRE_BIO = auto()
+
+
     #TODO Coffret
 
 
+# -------
+# Product
+# -------
 
-# -------------
-# Product Flags
-# -------------
 
-@unique
 class ContainerFlag(Flag, models.IntegerChoices):
     NONE = 0
     # -- function --
@@ -90,8 +165,7 @@ class ContainerFlag(Flag, models.IntegerChoices):
     AIRLESS = auto()
 
 
-@unique
-class ProductDetailsFlags(Flag):
+class ProductDetailsFlag(Flag):
     NONE = 0
     # -- color --
     RED = auto()
@@ -120,7 +194,7 @@ class ProductDetailsFlags(Flag):
 
 
 class PropertiesFlag(Flag):
-    NONE = auto()
+    NONE = 0
     EXFOLIANT = auto()
     PURIFIANT = auto()
     DESALTERANT = auto()
@@ -133,30 +207,122 @@ class PropertiesFlag(Flag):
     ZONE_CICATRICIELLE = auto()
     FRAICHEUR = auto()
     ANTI_AGE = auto()
+    SEBOREGULATEUR = auto()
+
+
+# ===============
+# ABSTRACTS Class
+# ===============
+
+class MeasurementUnitModelBased:
+    __measurement_unit: MeasurementUnit
+
+    def __init__(self):
+        self._call_define_measurement_unit()
+
+    def _define_measurement_unit(self, unit_value):
+        self.__measurement_unit = MeasurementUnit(unit_value)
+
+    def _call_define_measurement_unit(self):
+        raise NotImplementedError
+
+    @property
+    def measurement_unit(self):
+        return self.__measurement_unit
 
 
 # ==============
 # DB TABLE MODEL
 # ==============
 
+# ---------------
+# FIELDS Creation
+# ---------------
+
+class MeasurementUnitFields(models.PositiveSmallIntegerField):
+
+    description = "A field to add a MeasurementUnit value"
+
+    def __init__(self, *args, **kwargs):
+        kwargs['choices'] = MeasurementUnit.choices
+        kwargs['default'] = MeasurementUnit.NONE
+        super().__init__(*args, **kwargs)
+
+
+# --------------
+# MODELS Creation
+# --------------
+
+class UserAroma(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.user.username
+
+
 # TODO --> [QUESTION] : Product Category --> Many To ONE ?
 
-class Category(models.Model):
-    code = models.IntegerField(choices=CategoryChoice.choices)
+class Category(MPTTModel):
+    code = models.IntegerField(choices=FunctionnalCategoryChoice.choices)
     label = models.CharField(max_length=25, null=False)
-    parent_id = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True)
+    parent = TreeForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name="children")
+
+    class MPTTMeta:
+        order_insertion_by = ['label']
+        
+    def __str__(self):
+        return self.label
 
 
 class Product(models.Model):
     label = models.CharField(max_length=200)
-    unit = models.CharField(max_length=MEASUREMENT_UNIT_LEN_MAX, choices=MeasurementUnit.choices)
-    category_id = models.ForeignKey(Category, on_delete=models.CASCADE)
-    containers_flag = models.IntegerField(default=ContainerFlag.NONE)
-    product_details_flag = models.IntegerField(default=ProductDetailsFlags.NONE)
-    properties_flag = models.IntegerField(default=PropertiesFlag.NONE)
+    category = models.ForeignKey(Category, on_delete=models.CASCADE)
+    containers_flag = models.IntegerField(default=ContainerFlag.NONE.value)
+    product_details_flag = models.IntegerField(default=ProductDetailsFlag.NONE.value)
+    properties_flag = models.IntegerField(default=PropertiesFlag.NONE.value)
+    url = models.URLField()
+    
+    def __str__(self):
+        return self.label
+    
+    def get_smallest_satisfying_packaging(self, quantity=None, unit: MeasurementUnit=None):
+        packagings = self.packagings.all()
+     #   print("get smallest satisfying packaging with quantity = {}".format(quantity))
+        # [Question] Unit conversion --> for now all in ml and grams, liter and kg would be for front only
+        
+        smallest_satisfied = self.get_biggest_packaging()
+      #  print("biggest packaging found :", smallest_satisfied)
+        # No need to loop if biggest cant_satisfied quantity
+        if quantity is not None and smallest_satisfied.quantity < quantity:
+            return smallest_satisfied
+        
+        # find smallest satisfying packaging
+        for packaging in packagings:
+            try:
+                if packaging <= smallest_satisfied and (quantity is None or packaging.quantity >= quantity):
+                    smallest_satisfied = packaging
+            except MeasurementUnitComparaisonError as e:
+                message = "Product {} : {}".format(self, e)
+                log.debug(message)
+
+        return smallest_satisfied
+    
+    def get_biggest_packaging(self):
+        packagings = self.packagings.all()
+        biggest = None
+        for packaging in packagings:
+            try:
+     #           print("compare pack : {} than biggest : {}".format(packaging, biggest))
+                if packaging >= biggest:
+                    biggest = packaging
+        #            print("bigger")
+            except MeasurementUnitComparaisonError as e:
+                message = "Product {} : {}".format(self, e)
+                log.debug(message)
+        return biggest
 
 
-class Recipe(models.Model):
+class Recipe(models.Model, MeasurementUnitModelBased):
 
     class Level(models.IntegerChoices):
         STARTER = auto()
@@ -166,49 +332,194 @@ class Recipe(models.Model):
     label = models.CharField(max_length=200)
     container_type = models.IntegerField(choices=ContainerFlag.choices)
     conservation = models.PositiveSmallIntegerField(null=False)  # MONTH
-    ingredients = models.ManyToManyField(Product, through='RecipeQuantity', related_name="recipes")
     final_quantity = models.PositiveIntegerField(null=False)
-    level = models.IntegerField(choices=Level.choices, default=Level.STARTER)
-    properties_flag = models.IntegerField(default=PropertiesFlag.NONE)
+    final_unit = MeasurementUnitFields()
+    level = models.IntegerField(choices=Level.choices, default=Level.STARTER.value)
+    properties_flag = models.IntegerField(default=PropertiesFlag.NONE.value)
     time = models.PositiveSmallIntegerField()  # MINUTES
+    url = models.URLField()
+
+    def _call_define_measurement_unit(self):
+        self._define_measurement_unit(self.final_unit)
+
+    def add_to_basket(self, user: UserAroma):
+        # Add PRODUCTS to basket
+        ingredients = self.ingredients.all()
+        print("How to make {} recipe :".format(self))
+        for ingredient in ingredients:
+            print("Need", ingredient)
+            for packaging in ingredient.packagings_needed:
+                print("packaging '{}' is added to basket".format(packaging))
+                ProductBasket.objects.create(
+                    user=user,
+                    packaging=packaging
+                )
+        # Add RECIPE to Basket
+        RecipeBasket.objects.create(user=user, recipe=self, quantity=1)
+        
+    def __str__(self):
+        return self.label
 
 
-class RecipeQuantity(models.Model):
-    recipe_id = models.ForeignKey(Recipe, on_delete=models.CASCADE)
-    product_id = models.ForeignKey(Product, on_delete=models.CASCADE)
-    quantity = models.FloatField(null=False, default=0)
-    unit = models.IntegerField(choices=MeasurementUnit.choices, default=MeasurementUnit.ML)
+class RecipeQuantity(models.Model, MeasurementUnitModelBased):
+    recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE, related_name="ingredients")
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="recipes")
+    _quantity = models.FloatField(null=False, default=0)
+    unit = MeasurementUnitFields()
+    
+    __packagings_needed: list()
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__update_packagings_needed()
+        
+    def _call_define_measurement_unit(self):
+        self._define_measurement_unit(self.unit)
+        
+    def __update_packagings_needed(self):
+        self.__packagings_needed = list()
+        quantity_to_handle = self._quantity
+        while quantity_to_handle > 0:
+            pack_to_add = self.product.get_smallest_satisfying_packaging(quantity=quantity_to_handle)
+            if pack_to_add:
+                self.__packagings_needed.append(pack_to_add)
+                quantity_to_handle -= pack_to_add.quantity
+            else:
+                # TODO define what to do
+                import pdb;pdb.set_trace()
+                
+    @property
+    def packagings_needed(self):
+        return self.__packagings_needed
+    
+    @property
+    def quantity(self):
+        return self._quantity
+    
+    @quantity.setter
+    def quantity(self, new_quantity):
+        self._quantity = new_quantity
+        self.__update_packagings_needed()
+        
+    def __str__(self):
+        message = "{} {} of {}".format(
+            self._quantity,
+            self.unit,
+            self.product
+        )
+        return message
+    
 
 
-class Packaging(models.Model):
-    product_id = models.ForeignKey(Product, on_delete=models.CASCADE)
+class Packaging(models.Model, MeasurementUnitModelBased):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="packagings")
     quantity = models.PositiveIntegerField()
-    unit = models.SmallIntegerField(choices=MeasurementUnit.choices, default=MeasurementUnit.ML)
+    unit = MeasurementUnitFields()
     price = models.FloatField(null=False)
 
+    def _call_define_measurement_unit(self):
+        self._define_measurement_unit(self.unit)
+        
+    def __str__(self):
+        my_str = "{} : {} {}".format(
+            self.product.__str__(),
+            self.quantity,
+            self.measurement_unit.name
+        )
+        return my_str
+    
+    def __le__(self, packaging_to_compare):
+        # nothing to compare with
+        if not packaging_to_compare:
+            return True
+        # not the same unit to compare
+        if self.unit != packaging_to_compare.unit:
+            raise MeasurementUnitComparaisonError(self.unit, packaging_to_compare.unit)
+        # comparaison
+        return self.quantity <= packaging_to_compare.quantity
 
-class UserAroma(models.Model):
-    user_id = models.ForeignKey(User, on_delete=models.CASCADE)
+    def __lt__(self, packaging_to_compare):
+        # nothing to compare with
+        if not packaging_to_compare:
+            return True
+        # not the same unit to compare
+        if self.unit != packaging_to_compare.unit:
+            raise MeasurementUnitComparaisonError(self.unit, packaging_to_compare.unit)
+        # comparaison
+        return self.quantity < packaging_to_compare.quantity
+    
+    def __ge__(self, packaging_to_compare):
+        # nothing to compare with
+        if not packaging_to_compare:
+            return True
+        # not the same unit to compare
+        if self.unit != packaging_to_compare.unit:
+            raise MeasurementUnitComparaisonError(self.unit, packaging_to_compare.unit)
+        # comparaison
+        return self.quantity >= packaging_to_compare.quantity
+
+    def __gt__(self, packaging_to_compare):
+        # nothing to compare with
+        if not packaging_to_compare:
+            return True
+        # not the same unit to compare
+        if self.unit != packaging_to_compare.unit:
+            raise MeasurementUnitComparaisonError(self.unit, packaging_to_compare.unit)
+        # comparaison
+        return self.quantity > packaging_to_compare.quantity
+
 
 
 class ProductBasket(models.Model):
-    user_id = models.ForeignKey(UserAroma, on_delete=models.CASCADE)
-    packaging_id = models.ForeignKey(Packaging, on_delete=models.CASCADE)
-    quantity = models.PositiveIntegerField()
+    user = models.ForeignKey(UserAroma, on_delete=models.CASCADE)
+    packaging = models.ForeignKey(Packaging, on_delete=models.CASCADE)
+  #  quantity = models.PositiveIntegerField()
+        
+    def __str__(self):
+        return self.packaging.__str__()
+    
+    def __contains__(self, product: Product):
+        print("IS {} IN {} ?".format(product, self))
+        return True if self.packaging.product == product else False
+            
+    @classmethod
+    def optimize_basket(cls, user:UserAroma):
+        pass
+        
 
 
 class RecipeBasket(models.Model):
-    user_id = models.ForeignKey(UserAroma, on_delete=models.CASCADE)
-    recipe_id = models.ForeignKey(Recipe, on_delete=models.CASCADE)
+    user = models.ForeignKey(UserAroma, on_delete=models.CASCADE, related_name="basket_recipes")
+    recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField()
 
+    def __str__(self):
+        return self.recipe.__str__()
 
-class UserStock(models.Model):
-    user_id = models.ForeignKey(UserAroma, on_delete=models.CASCADE)
-    product_id = models.ForeignKey(Product, on_delete=models.CASCADE)
+
+class UserStock(models.Model, MeasurementUnitModelBased):
+    user = models.ForeignKey(UserAroma, on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.FloatField(null=False, default=0)
-    unit = models.IntegerField(choices=MeasurementUnit.choices, default=MeasurementUnit.ML)
+    unit = MeasurementUnitFields()
 
+    def _call_define_measurement_unit(self):
+        self._define_measurement_unit(self.unit)
+        
+    def __str__(self):
+        return self.product.label
+
+
+class MeasurementUnitComparaisonError(Exception):
+
+    def __init__(self, unit, unit_to_compare):
+        self.__unit = unit
+        self.__unit_to_compare = unit_to_compare
+        
+    def __str__(self):
+        message = "{} and {} can not be compared".format(self.__unit, self.__unit_to_compare)
+        return message
+        
 
 if __name__ == '__main__':
     import pdb; pdb.set_trace()
