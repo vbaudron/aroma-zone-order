@@ -1,17 +1,20 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-   <link rel="stylesheet" href="/media/css/style.css" />
-   <title>{% block title %}Aroma Zone App pour commander facilement{% endblock %}</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
+   <title>{% block title %} Aroma Zone App pour commander facilement {% endblock %}</title>
 </head>
 <body>
 <header>Aroma Zone Order</header>
     <nav>
        {% block nav %}
        <ul>
-            <li><a href="/">Accueil</a></li>
-            <li><a href="/app/">App</a></li>
-            <li><a href="/contact/">Contact</a></li>
+            <li><a href="/app/">Acceuil</a></li>
+            <li><a href="/app/categories">Liste des categories</a></li>
+            <li><a href="/app/products">Liste des produits</a></li>
+            <li><a href="/app/recipes">Liste des Recettes</a></li>
+            <li><a href="/admin/">admin</a></li>
        </ul>
        {% endblock %}
    </nav>

@@ -1,12 +1,26 @@
-{% extends "base.html" %}
-{% block title %}La recette {{id_recipe}} {% endblock %}
+{% extends "myapp/base.html" %}
+{% block title %}La recette {{recipe.label}} {% endblock %}
 {% block content %}
-    <h2>Recette {{id_recipe}}</h2>
-    <p>
-       Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec rhoncus 
-       massa non tortor. Vestibulum diam diam, posuere in viverra in, 
-       ullamcorper et libero. Donec eget libero quis risus congue imperdiet ac 
-       id lectus. Nam euismod cursus arcu, et consequat libero ullamcorper sit 
-       amet.
-    </p>
+
+	<h2>Recette : {{recipe.label}}</h2>
+	<p>conservation : {{recipe.conservation}}</p>
+	<p>Quantité : {{recipe.final_quantity}} {{recipe.measurement_unit.name}}</p>
+	<p>conservation : {{recipe.conservation}}</p>
+	<p><a href= {{product.url}} >url</a></p>
+	
+	<p>Ingredients :</p>
+	<ul>
+	{% for recipe_product in products %}
+		<li><a href="{% url 'view_product' id_product=recipe_product.product.id %}"> {{ recipe_product.product.label }} </a> : {{ recipe_product.quantity }} {{ recipe_product.measurement_unit.name }} </li>
+	{% empty %}
+		<p class="empty">Cette recette ne contient pas d'ingrédients pour le moment.</p>
+	{% endfor %}
+	</ul>
+
+	<form action="{% url 'view_recipe' id_recipe=recipe.id%}" method="post">
+		{% csrf_token %}
+		{{ form.as_table }}
+		<input type="submit" value="Ajouter au panier" />
+	</form>
+
 {% endblock %}
