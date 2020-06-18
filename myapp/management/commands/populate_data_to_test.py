@@ -1,4 +1,4 @@
-from myapp.models import UserAroma, Recipe, RecipeBasket, RecipeQuantity, Product, ProductBasket
+from myapp.models import AromaUser, Recipe, RecipeBasket, RecipeQuantity, Product, ProductBasket
 from django.core.management import BaseCommand
 
 
@@ -12,7 +12,7 @@ class Command(BaseCommand):
         recipe = Recipe.objects.get_or_create(
             
         )
-        user = UserAroma.objects.get(pk=1)
+        user = AromaUser.objects.get(pk=1)
         ProductBasket.add_products_from_recipe(
             user=user,
             recipe=recipe

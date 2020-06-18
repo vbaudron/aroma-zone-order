@@ -253,8 +253,86 @@ class MeasurementUnitFields(models.PositiveSmallIntegerField):
 # MODELS Creation
 # --------------
 
-class UserAroma(models.Model):
+class AromaUser(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    def optimize_basket(self):
+        """ Try to minimise number of packaging for each product needed in all recipe and handle Stock if there is
+        quantity_per_product will be created :
+        {
+            "product_1": [{
+                "unit": MeasurementUnit_1,
+                "quantity": sum of quantity
+            },
+            {
+                "unit": MeasurementUnit_2,
+                "quantity": sum of quantity
+            }],
+            ...
+        }
+        TODO 2 different units for same products shoudn't exist, does it ?
+        We
+        """
+        # Simple QUERY because can not group by product and add quantity in case unit is different
+        basket_recipes = RecipeBasket.objects.filter(user=self)
+        print("basket :", basket_recipes)
+
+        quantity_needed = dict()
+        # Handle RECIPE BASKET
+        for recipe_basket in basket_recipes:
+            print("--------- RECIPE :", recipe_basket)
+            ingredients = recipe_basket.recipe.ingredients.all()
+            for recipe_quantity in ingredients:
+                print("---- recipe_quantity :", recipe_quantity)
+                if recipe_quantity.product not in quantity_needed.keys():
+                    quantity_needed[recipe_quantity.product] = list()
+                    print("product not in key --> created :", quantity_needed[recipe_quantity.product])
+                unit_list = quantity_needed[recipe_quantity.product]
+                print("** unit_list definition ** --> ", unit_list)
+                print("try to find :", recipe_quantity.measurement_unit.name)
+                try:
+                    idx = next(index for (index, d) in enumerate(unit_list) if d["unit"] == recipe_quantity.measurement_unit.name)
+                    print("{} NOT FOUND in {} at idx ".format(recipe_quantity.measurement_unit.name, unit_list, idx))
+                    print("before :", unit_list[idx])
+                    unit_list[idx]["quantity"] += recipe_quantity.quantity
+                    print("after :", unit_list[idx])
+                except StopIteration:
+                    print("{} NOT FOUND in {}".format(recipe_quantity.measurement_unit.name, unit_list))
+                    unit_list.append({
+                        "unit": recipe_quantity.measurement_unit.name,
+                        "quantity": recipe_quantity.quantity
+                    })
+                    print("created :", unit_list[len(unit_list) - 1])
+        #      if not any(d["unit"] == recipe_quantity.measurement_unit for d in unit_list):
+        print("\nquantity_needed :", quantity_needed)
+
+        # Handle PRODUCT Basket
+
+        # Handle Stock
+        stock = UserStock.objects.filter(user=self)
+
+        # Add Packagings to ProductBasket
+        for product, data in quantity_needed.items():
+            packagings_to_add = list()
+            data = data[0]
+            print("\nPRODUCT {}  DATA {}".format(product, data))
+            #TODO : MAKE IT CLEARED. Here supposed that ONLY ONE UNIT PER PRODUCT
+            quantity_to_handle = data["quantity"]
+            while quantity_to_handle > 0:
+                pack_to_add = product.get_smallest_satisfying_packaging(
+                    quantity=quantity_to_handle,
+                    unit=MeasurementUnit[data["unit"]]
+                )
+                if pack_to_add:
+                    packagings_to_add.append(pack_to_add)
+                    quantity_to_handle -= pack_to_add.quantity
+                else:
+                    # TODO define what to do
+                    import pdb;pdb.set_trace()
+            print("For {} {} of PRODUCT {} packagings needed are : {}".format(data["quantity"], data["unit"], product, packagings_to_add))
+
+
+
 
     def __str__(self):
         return self.user.username
@@ -298,12 +376,15 @@ class Product(models.Model):
         
         # find smallest satisfying packaging
         for packaging in packagings:
-            try:
-                if packaging <= smallest_satisfied and (quantity is None or packaging.quantity >= quantity):
-                    smallest_satisfied = packaging
-            except MeasurementUnitComparaisonError as e:
-                message = "Product {} : {}".format(self, e)
-                log.debug(message)
+            if not unit or unit == packaging.measurement_unit:
+                try:
+                    if packaging <= smallest_satisfied and (quantity is None or packaging.quantity >= quantity):
+                        smallest_satisfied = packaging
+                except MeasurementUnitComparaisonError as e:
+                    message = "Product {} : {}".format(self, e)
+                    log.debug(message)
+            else:
+                print("unit of packaging {} is not the same as asked ({})".format(packaging.measurement_unit, unit))
 
         return smallest_satisfied
     
@@ -342,7 +423,10 @@ class Recipe(models.Model, MeasurementUnitModelBased):
     def _call_define_measurement_unit(self):
         self._define_measurement_unit(self.final_unit)
 
-    def add_to_basket(self, user: UserAroma):
+    def add_to_basket(self, user: AromaUser):
+        RecipeBasket.objects.create(user=user, recipe=self, quantity=1)
+
+    def add_ingredients_to_basket(self, user: AromaUser):
         # Add PRODUCTS to basket
         ingredients = self.ingredients.all()
         print("How to make {} recipe :".format(self))
@@ -354,9 +438,7 @@ class Recipe(models.Model, MeasurementUnitModelBased):
                     user=user,
                     packaging=packaging
                 )
-        # Add RECIPE to Basket
-        RecipeBasket.objects.create(user=user, recipe=self, quantity=1)
-        
+
     def __str__(self):
         return self.label
 
@@ -408,7 +490,6 @@ class RecipeQuantity(models.Model, MeasurementUnitModelBased):
             self.product
         )
         return message
-    
 
 
 class Packaging(models.Model, MeasurementUnitModelBased):
@@ -469,9 +550,8 @@ class Packaging(models.Model, MeasurementUnitModelBased):
         return self.quantity > packaging_to_compare.quantity
 
 
-
 class ProductBasket(models.Model):
-    user = models.ForeignKey(UserAroma, on_delete=models.CASCADE)
+    user = models.ForeignKey(AromaUser, on_delete=models.CASCADE)
     packaging = models.ForeignKey(Packaging, on_delete=models.CASCADE)
   #  quantity = models.PositiveIntegerField()
         
@@ -481,15 +561,10 @@ class ProductBasket(models.Model):
     def __contains__(self, product: Product):
         print("IS {} IN {} ?".format(product, self))
         return True if self.packaging.product == product else False
-            
-    @classmethod
-    def optimize_basket(cls, user:UserAroma):
-        pass
         
 
-
 class RecipeBasket(models.Model):
-    user = models.ForeignKey(UserAroma, on_delete=models.CASCADE, related_name="basket_recipes")
+    user = models.ForeignKey(AromaUser, on_delete=models.CASCADE, related_name="basket_recipes")
     recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField()
 
@@ -498,7 +573,7 @@ class RecipeBasket(models.Model):
 
 
 class UserStock(models.Model, MeasurementUnitModelBased):
-    user = models.ForeignKey(UserAroma, on_delete=models.CASCADE)
+    user = models.ForeignKey(AromaUser, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.FloatField(null=False, default=0)
     unit = MeasurementUnitFields()
