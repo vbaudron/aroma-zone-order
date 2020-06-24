@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from myapp.models import Category, ContainerFlag, FunctionnalCategoryChoice, MeasurementUnit, Packaging, Product, \
     ProductDetailsFlag, PropertiesFlag, Recipe, RecipeQuantity, MeasurementUnitComparaisonError, AromaUser, \
-    ProductBasket
+    ProductBasket, RecipeBasket
 
 FAKE_URL = "www.google.fr"
 DEFAULT_PRICE = 8
@@ -354,7 +354,7 @@ class RecipeTest(TestCase):
             url=FAKE_URL
         )
 
-        product = Product.objects.create(
+        product_1 = Product.objects.create(
             label="product_1",
             category=category,
             containers_flag=ContainerFlag.NONE.value,
@@ -362,8 +362,23 @@ class RecipeTest(TestCase):
             url=FAKE_URL
         )
 
+        product_2 = Product.objects.create(
+            label="product_2",
+            category=category,
+            containers_flag=ContainerFlag.NONE.value,
+            product_details_flag=ProductDetailsFlag.NONE.value,
+            url=FAKE_URL
+        )
+
         Packaging.objects.create(
-            product=product,
+            product=product_1,
+            quantity=10,
+            unit=MeasurementUnit.ML.value,
+            price=DEFAULT_PRICE
+        )
+
+        Packaging.objects.create(
+            product=product_2,
             quantity=10,
             unit=MeasurementUnit.ML.value,
             price=DEFAULT_PRICE
@@ -371,14 +386,91 @@ class RecipeTest(TestCase):
 
     def setUp(self):
         self.recipe = Recipe.objects.get(pk=1)
-        self.product = Product.objects.get(pk=1)
-        self.packaging = Packaging.objects.get(pk=1)
+        self.product_1 = Product.objects.get(pk=1)
+        self.product_2 = Product.objects.get(pk=2)
+        self.packaging_1 = Packaging.objects.get(pk=1)
+        self.packaging_2 = Packaging.objects.get(pk=2)
         self.user = AromaUser.objects.get(pk=1)
 
+    # ------------------------
+    # get_all_packaging_needed
+    # ------------------------
+    def test_get_all_packaging_needed__one_product_one_packaging(self):
+        rq = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product_1,
+            _quantity=5,
+            unit=MeasurementUnit.ML
+        )
+
+        packaging_result = self.recipe.get_all_packaging_needed()
+        self.assertEqual(len(packaging_result), 1)
+        self.assertEqual(self.packaging_1, packaging_result[0])
+
+    def test_get_all_packaging_needed__one_product_two_packaging(self):
+        rq = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product_1,
+            _quantity=20,
+            unit=MeasurementUnit.ML
+        )
+
+        packaging_result = self.recipe.get_all_packaging_needed()
+
+        # one product two packaging
+        self.assertEqual(len(packaging_result), len(rq.packagings_needed))
+        for i in range(len(packaging_result)):
+            self.assertEqual(packaging_result[i], rq.packagings_needed[i])
+
+    def test_get_all_packaging_needed__two_products_one_packaging(self):
+        rq = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product_1,
+            _quantity=5,
+            unit=MeasurementUnit.ML
+        )
+
+        rq_2 = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product_2,
+            _quantity=5,
+            unit=MeasurementUnit.ML
+        )
+
+        packaging_result = self.recipe.get_all_packaging_needed()
+        self.assertEqual(len(packaging_result), 2)
+        self.assertEqual(self.packaging_1, packaging_result[0])
+        self.assertEqual(self.packaging_2, packaging_result[1])
+
+    def test_get_all_packaging_needed__two_products_two_packaging(self):
+        rq = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product_1,
+            _quantity=20,
+            unit=MeasurementUnit.ML
+        )
+
+        rq_2 = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product_2,
+            _quantity=20,
+            unit=MeasurementUnit.ML
+        )
+
+        packaging_result = self.recipe.get_all_packaging_needed()
+        self.assertEqual(len(packaging_result), 4)
+        self.assertEqual(self.packaging_1, packaging_result[0])
+        self.assertEqual(self.packaging_1, packaging_result[1])
+        self.assertEqual(self.packaging_2, packaging_result[2])
+        self.assertEqual(self.packaging_2, packaging_result[3])
+
+    # ---------------------
+    # add_product_to_basket
+    # ---------------------
     def test_add_products_to_basket__one_product_one_packaging(self):
         rq = RecipeQuantity.objects.create(
             recipe=self.recipe,
-            product=self.product,
+            product=self.product_1,
             _quantity=5,
             unit=MeasurementUnit.ML
         )
@@ -393,12 +485,68 @@ class RecipeTest(TestCase):
         # one product one packaging
         basket = ProductBasket.objects.all()
         self.assertEqual(len(basket), 1)
-        self.assertEqual(self.packaging, basket[0].packaging)
+        self.assertEqual(self.packaging_1, basket[0].packaging)
 
-    def test_add_products_to_basket__one_product_two_packagings(self):
+    def test_add_products_to_basket__one_product_two_packaging(self):
         rq = RecipeQuantity.objects.create(
             recipe=self.recipe,
-            product=self.product,
+            product=self.product_1,
+            _quantity=20,
+            unit=MeasurementUnit.ML
+        )
+
+        # nothing in basket at first
+        basket = ProductBasket.objects.all()
+        self.assertEqual(len(basket), 0)
+
+        # Add recipe to basket
+        self.recipe.add_ingredients_to_basket(user=self.user)
+
+        # one product two packaging
+        basket = ProductBasket.objects.all()
+        self.assertEqual(len(basket), len(rq.packagings_needed))
+        for i in range(len(basket)):
+            self.assertEqual(basket[i].packaging, rq.packagings_needed[i])
+
+    def test_add_products_to_basket__two_products_one_packaging(self):
+        rq = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product_1,
+            _quantity=5,
+            unit=MeasurementUnit.ML
+        )
+
+        rq_2 = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product_2,
+            _quantity=5,
+            unit=MeasurementUnit.ML
+        )
+
+        # nothing in basket at first
+        basket = ProductBasket.objects.all()
+        self.assertEqual(len(basket), 0)
+
+        # Add recipe to basket
+        self.recipe.add_ingredients_to_basket(user=self.user)
+
+        # one product one packaging
+        basket = ProductBasket.objects.all()
+        self.assertEqual(len(basket), 2)
+        self.assertEqual(self.packaging_1, basket[0].packaging)
+        self.assertEqual(self.packaging_2, basket[1].packaging)
+
+    def test_add_products_to_basket__two_products_two_packaging(self):
+        rq = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product_1,
+            _quantity=20,
+            unit=MeasurementUnit.ML
+        )
+
+        rq_2 = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product_2,
             _quantity=20,
             unit=MeasurementUnit.ML
         )
@@ -412,9 +560,11 @@ class RecipeTest(TestCase):
 
         # one product one packaging
         basket = ProductBasket.objects.all()
-        self.assertEqual(len(basket), len(rq.packagings_needed))
-        for i in range(len(basket)):
-            self.assertEqual(basket[i].packaging, rq.packagings_needed[i])
+        self.assertEqual(len(basket), 4)
+        self.assertEqual(self.packaging_1, basket[0].packaging)
+        self.assertEqual(self.packaging_1, basket[1].packaging)
+        self.assertEqual(self.packaging_2, basket[2].packaging)
+        self.assertEqual(self.packaging_2, basket[3].packaging)
 
 
 # ===============
@@ -474,7 +624,7 @@ class RecipeQuantityTest(TestCase):
             price=DEFAULT_PRICE
         )
 
-    def test_packagings_needed__only_one(self):
+    def test_packaging_needed__only_one(self):
         self.create_packaging_data_for_packaging_needed()
 
         # INFERIOR --> Only one packaging needed and shoudl be PACKAGING_1
@@ -510,7 +660,7 @@ class RecipeQuantityTest(TestCase):
         self.assertEqual(1, len(rq.packagings_needed))
         self.assertEqual(self.packaging_2, rq.packagings_needed[0])
 
-    def test_packagings_needed__many(self):
+    def test_packaging_needed__many(self):
         self.create_packaging_data_for_packaging_needed()
 
         # 2 Needed : Pack 1 + Pack 2
@@ -610,7 +760,6 @@ class RecipeQuantityTest(TestCase):
         self.assertEqual(self.packaging_2, rq.packagings_needed[1])
 
 
-
 # ==========
 # AROMA USER
 # ==========
@@ -629,26 +778,17 @@ class AromaUserTest(TestCase):
         )
 
     def generate_optimize_basket_base_data(self):
-        # Create Category
+        # Get User
+        self.user = AromaUser.objects.get(id=1)
+
+        # Create CATEGORY
         category = Category.objects.create(
             code=FunctionnalCategoryChoice.ARGILE,
             label="Categorie_1",
             parent=None
         )
 
-        # Create Recipe
-        self.recipe = Recipe.objects.create(
-            label="recipe_test",
-            container_type=ContainerFlag.POT.value,
-            conservation=3,
-            final_quantity=30,
-            final_unit=MeasurementUnit.ML.value,
-            level=Recipe.Level.STARTER,
-            properties_flag=PropertiesFlag.NONE.value,
-            time=10,
-            url=FAKE_URL
-        )
-
+        # Create PRODUCTS
         self.product_1 = Product.objects.create(
             label="product_1",
             category=category,
@@ -665,20 +805,240 @@ class AromaUserTest(TestCase):
             url=FAKE_URL
         )
 
-    # -----------------
-    # Packagings Needed
-    # -----------------
-    def create_packaging_data_for_packaging_needed(self):
-        self.packaging_1 = Packaging.objects.create(
+        self.product_3 = Product.objects.create(
+            label="product_3",
+            category=category,
+            containers_flag=ContainerFlag.NONE.value,
+            product_details_flag=ProductDetailsFlag.NONE.value,
+            url=FAKE_URL
+        )
+
+        # Create PACKAGING
+        # -- Product_1
+        self.packaging_product_1__1 = Packaging.objects.create(
             product=self.product_1,
+            quantity=15,
+            unit=MeasurementUnit.ML.value,
+            price=DEFAULT_PRICE
+        )
+
+        self.packaging_product_1__2 = Packaging.objects.create(
+            product=self.product_1,
+            quantity=30,
+            unit=MeasurementUnit.ML,
+            price=DEFAULT_PRICE
+        )
+
+        # -- Product_2
+        self.packaging_product_2__1 = Packaging.objects.create(
+            product=self.product_2,
+            quantity=30,
+            unit=MeasurementUnit.ML.value,
+            price=DEFAULT_PRICE
+        )
+
+        self.packaging_product_2__2 = Packaging.objects.create(
+            product=self.product_2,
+            quantity=50,
+            unit=MeasurementUnit.ML,
+            price=DEFAULT_PRICE
+        )
+
+        # -- Product 3
+        self.packaging_product_3__1 = Packaging.objects.create(
+            product=self.product_3,
             quantity=10,
             unit=MeasurementUnit.ML.value,
             price=DEFAULT_PRICE
         )
 
-        self.packaging_2 = Packaging.objects.create(
-            product=self.product_1,
+        self.packaging_product_3__2 = Packaging.objects.create(
+            product=self.product_3,
             quantity=20,
             unit=MeasurementUnit.ML,
             price=DEFAULT_PRICE
         )
+
+        # Create RECIPE
+        self.recipe_1 = Recipe.objects.create(
+            label="recipe_1",
+            container_type=ContainerFlag.POT.value,
+            conservation=3,
+            final_quantity=30,
+            final_unit=MeasurementUnit.ML.value,
+            level=Recipe.Level.STARTER,
+            properties_flag=PropertiesFlag.NONE.value,
+            time=10,
+            url=FAKE_URL
+        )
+
+        self.recipe_2 = Recipe.objects.create(
+            label="recipe_2",
+            container_type=ContainerFlag.POT.value,
+            conservation=3,
+            final_quantity=30,
+            final_unit=MeasurementUnit.ML.value,
+            level=Recipe.Level.STARTER,
+            properties_flag=PropertiesFlag.NONE.value,
+            time=10,
+            url=FAKE_URL
+        )
+
+        # Create RECIPE QUANTITIES
+        rq_1_1 = RecipeQuantity.objects.create(
+            recipe=self.recipe_1,
+            product=self.product_1,
+            _quantity=10,
+            unit=MeasurementUnit.ML
+        )
+
+        rq_1_2 = RecipeQuantity.objects.create(
+            recipe=self.recipe_1,
+            product=self.product_2,
+            _quantity=25,
+            unit=MeasurementUnit.ML
+        )
+
+        rq_2_2 = RecipeQuantity.objects.create(
+            recipe=self.recipe_2,
+            product=self.product_2,
+            _quantity=20,
+            unit=MeasurementUnit.ML
+        )
+
+        rq_2_3 = RecipeQuantity.objects.create(
+            recipe=self.recipe_2,
+            product=self.product_3,
+            _quantity=30,
+            unit=MeasurementUnit.ML
+        )
+
+    # ---------------
+    # optimize_basket
+    # ---------------
+    def test_optimize_basket__recipe_1(self):
+        print("\n\ntest_optimize_basket__recipe_1  --> START\n")
+        self.generate_optimize_basket_base_data()
+
+        # Add only recipe_1 to basket
+        rb = RecipeBasket.objects.create(
+            user=self.user,
+            recipe=self.recipe_1,
+            quantity=1
+        )
+        assert rb
+
+        basket = ProductBasket.objects.all()
+        self.assertEqual(len(basket), 0)
+
+
+        self.user.optimize_basket()
+
+        basket = ProductBasket.objects.all()
+        expected_packaging = self.recipe_1.get_all_packaging_needed()
+
+        self.assertEqual(len(basket), len(expected_packaging))
+
+        for i in range(len(expected_packaging)):
+            self.assertEqual(basket[i].packaging, expected_packaging[i])
+
+        print("\ntest_optimize_basket__recipe_1 --> END\n\n")
+
+    def test_optimize_basket__recipe_1_recipe_2(self):
+        print("\n\ntest_optimize_basket__recipe_1_recipe_2  --> START\n")
+        self.generate_optimize_basket_base_data()
+
+        # Add recipe_1 and recipe_2 to basket
+        rb = RecipeBasket.objects.create(
+            user=self.user,
+            recipe=self.recipe_1,
+            quantity=1
+        )
+        assert rb
+
+        rb_2 = RecipeBasket.objects.create(
+            user=self.user,
+            recipe=self.recipe_2,
+            quantity=1
+        )
+        assert rb_2
+
+        # basket is empty to start
+        basket = ProductBasket.objects.all()
+        self.assertEqual(len(basket), 0)
+
+        self.user.optimize_basket()
+
+        basket = ProductBasket.objects.all()
+
+        no_optimization_packagings = self.recipe_1.get_all_packaging_needed()
+        no_optimization_packagings.extend(self.recipe_2.get_all_packaging_needed())
+        self.assertNotEqual(len(basket), len(no_optimization_packagings))
+
+        print("NON OPTIMIZATION :", no_optimization_packagings)
+
+        expected_packaging = [
+            self.packaging_product_1__1,
+            self.packaging_product_2__2,
+            self.packaging_product_3__2,
+            self.packaging_product_3__1
+        ]
+        print("EXPECTATION :", expected_packaging)
+        self.assertEqual(len(basket), len(expected_packaging))
+
+        for i in range(len(expected_packaging)):
+            self.assertEqual(basket[i].packaging, expected_packaging[i])
+
+        print("\ntest_optimize_basket__recipe_1_recipe_2 --> END\n\n")
+
+    def test_optimize_basket__recipe_1_x2_recipe_2(self):
+        print("\n\ntest_optimize_basket__recipe_1_x2_recipe_2  --> START\n")
+        self.generate_optimize_basket_base_data()
+
+        # Add recipe_1 x 2 and recipe_2 to basket
+        rb = RecipeBasket.objects.create(
+            user=self.user,
+            recipe=self.recipe_1,
+            quantity=2
+        )
+        assert rb
+
+        rb_2 = RecipeBasket.objects.create(
+            user=self.user,
+            recipe=self.recipe_2,
+            quantity=1
+        )
+        assert rb_2
+
+        # basket is empty to start
+        basket = ProductBasket.objects.all()
+        self.assertEqual(len(basket), 0)
+
+        self.user.optimize_basket()
+
+        basket = ProductBasket.objects.all()
+
+        expected_packaging = [
+            self.packaging_product_1__2,
+            self.packaging_product_2__2,
+            self.packaging_product_2__1,
+            self.packaging_product_3__2,
+            self.packaging_product_3__1
+        ]
+        print("EXPECTATION :", expected_packaging)
+        self.assertEqual(len(basket), len(expected_packaging))
+
+        for i in range(len(expected_packaging)):
+            self.assertEqual(basket[i].packaging, expected_packaging[i])
+
+        print("\ntest_optimize_basket__recipe_1_x2_recipe_2 --> END\n\n")
+
+
+
+
+
+
+
+
+
+

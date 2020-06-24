@@ -280,7 +280,7 @@ class AromaUser(models.Model):
         quantity_needed = dict()
         # Handle RECIPE BASKET
         for recipe_basket in basket_recipes:
-            print("--------- RECIPE :", recipe_basket)
+            print("--------- RECIPE :", recipe_basket, "quantity :", recipe_basket.quantity)
             ingredients = recipe_basket.recipe.ingredients.all()
             for recipe_quantity in ingredients:
                 print("---- recipe_quantity :", recipe_quantity)
@@ -292,28 +292,29 @@ class AromaUser(models.Model):
                 print("try to find :", recipe_quantity.measurement_unit.name)
                 try:
                     idx = next(index for (index, d) in enumerate(unit_list) if d["unit"] == recipe_quantity.measurement_unit.name)
-                    print("{} NOT FOUND in {} at idx ".format(recipe_quantity.measurement_unit.name, unit_list, idx))
+                    print("'{}' NOT FOUND in {} at idx {}".format(recipe_quantity.measurement_unit.name, unit_list, idx))
                     print("before :", unit_list[idx])
-                    unit_list[idx]["quantity"] += recipe_quantity.quantity
+                    unit_list[idx]["quantity"] += (recipe_quantity.quantity * recipe_basket.quantity)
                     print("after :", unit_list[idx])
                 except StopIteration:
                     print("{} NOT FOUND in {}".format(recipe_quantity.measurement_unit.name, unit_list))
                     unit_list.append({
                         "unit": recipe_quantity.measurement_unit.name,
-                        "quantity": recipe_quantity.quantity
+                        "quantity": (recipe_quantity.quantity * recipe_basket.quantity)
                     })
                     print("created :", unit_list[len(unit_list) - 1])
         #      if not any(d["unit"] == recipe_quantity.measurement_unit for d in unit_list):
-        print("\nquantity_needed :", quantity_needed)
+        print("\n1. quantity_needed :", quantity_needed)
 
-        # Handle PRODUCT Basket
+        # Handle EXTRA QUANTITY WANTED
 
         # Handle Stock
         stock = UserStock.objects.filter(user=self)
 
-        # Add Packagings to ProductBasket
+        # Get pertinent packagings for needed quantities
+        full_packaging = list()
         for product, data in quantity_needed.items():
-            packagings_to_add = list()
+            packagings_to_add = list()  #  TODO (A): removed to directly add to full packaging
             data = data[0]
             print("\nPRODUCT {}  DATA {}".format(product, data))
             #TODO : MAKE IT CLEARED. Here supposed that ONLY ONE UNIT PER PRODUCT
@@ -324,12 +325,23 @@ class AromaUser(models.Model):
                     unit=MeasurementUnit[data["unit"]]
                 )
                 if pack_to_add:
-                    packagings_to_add.append(pack_to_add)
+                    packagings_to_add.append(pack_to_add) #  TODO (A): removed to directly add to full packaging
                     quantity_to_handle -= pack_to_add.quantity
+                    full_packaging.append(pack_to_add)
                 else:
                     # TODO define what to do
                     import pdb;pdb.set_trace()
             print("For {} {} of PRODUCT {} packagings needed are : {}".format(data["quantity"], data["unit"], product, packagings_to_add))
+
+        print("\n2. Packaging to add :", full_packaging)
+        # Add Packagings to ProductBasket
+        for packaging in full_packaging:
+            ProductBasket.objects.create(
+                user=self,
+                packaging=packaging
+            )
+            print(packaging, "has been added to basket")
+
 
 
 
@@ -365,10 +377,16 @@ class Product(models.Model):
     
     def get_smallest_satisfying_packaging(self, quantity=None, unit: MeasurementUnit=None):
         packagings = self.packagings.all()
-     #   print("get smallest satisfying packaging with quantity = {}".format(quantity))
+        # print("get smallest satisfying packaging with quantity = {}".format(quantity))
         # [Question] Unit conversion --> for now all in ml and grams, liter and kg would be for front only
         
         smallest_satisfied = self.get_biggest_packaging()
+
+        # TODO : How to handle when no packagings found
+        if not smallest_satisfied:
+            print("no packaging found for", self.label)
+            return None
+
       #  print("biggest packaging found :", smallest_satisfied)
         # No need to loop if biggest cant_satisfied quantity
         if quantity is not None and smallest_satisfied.quantity < quantity:
@@ -427,17 +445,26 @@ class Recipe(models.Model, MeasurementUnitModelBased):
         RecipeBasket.objects.create(user=user, recipe=self, quantity=1)
 
     def add_ingredients_to_basket(self, user: AromaUser):
-        # Add PRODUCTS to basket
+        # Add PACKAGING to basket
+        print("ADD {} TO BASKET".format(self.label))
+        packaging_needed = self.get_all_packaging_needed()
+        for packaging in packaging_needed:
+            ProductBasket.objects.create(
+                user=user,
+                packaging=packaging
+            )
+            print("packaging '{}' is added to basket".format(packaging))
+
+    def get_all_packaging_needed(self) -> list:
+        all_packs = list()
         ingredients = self.ingredients.all()
         print("How to make {} recipe :".format(self))
         for ingredient in ingredients:
             print("Need", ingredient)
             for packaging in ingredient.packagings_needed:
-                print("packaging '{}' is added to basket".format(packaging))
-                ProductBasket.objects.create(
-                    user=user,
-                    packaging=packaging
-                )
+                all_packs.append(packaging)
+                print("packaging '{}' is added to needs".format(packaging))
+        return all_packs
 
     def __str__(self):
         return self.label
