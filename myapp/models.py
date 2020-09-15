@@ -1,6 +1,8 @@
 import logging as log
 from abc import ABC
+from decimal import Decimal
 
+from django.core.validators import MinValueValidator
 from django.db import models
 from mptt.models import MPTTModel, TreeForeignKey
 from django.contrib.auth.models import User
@@ -371,7 +373,9 @@ class Product(models.Model):
     product_details_flag = models.IntegerField(default=ProductDetailsFlag.NONE.value)
     properties_flag = models.IntegerField(default=PropertiesFlag.NONE.value)
     url = models.URLField()
-    
+    density = models.DecimalField(null=True, default=None, decimal_places=2, max_digits=12, validators=[MinValueValidator(Decimal('0.01'))])
+    ml_to_goutte = models.PositiveSmallIntegerField(null=True, default=None)
+
     def __str__(self):
         return self.label
     
@@ -387,17 +391,21 @@ class Product(models.Model):
             print("no packaging found for", self.label)
             return None
 
-      #  print("biggest packaging found :", smallest_satisfied)
+        # print("biggest packaging found :", smallest_satisfied)
         # No need to loop if biggest cant_satisfied quantity
         if quantity is not None and smallest_satisfied.quantity < quantity:
             return smallest_satisfied
         
         # find smallest satisfying packaging
         for packaging in packagings:
+            # print("Packaging evaluated :", packaging)
             if not unit or unit == packaging.measurement_unit:
                 try:
                     if packaging <= smallest_satisfied and (quantity is None or packaging.quantity >= quantity):
                         smallest_satisfied = packaging
+                        # print("new smallest_satisfied :", smallest_satisfied)
+                    # else:
+                        # print("Not satisfying --> current smallest_satisfied :", smallest_satisfied, " - quantity :", quantity)
                 except MeasurementUnitComparaisonError as e:
                     message = "Product {} : {}".format(self, e)
                     log.debug(message)
@@ -473,23 +481,28 @@ class Recipe(models.Model, MeasurementUnitModelBased):
 class RecipeQuantity(models.Model, MeasurementUnitModelBased):
     recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE, related_name="ingredients")
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="recipes")
-    _quantity = models.FloatField(null=False, default=0)
+    _quantity = models.DecimalField(null=False, decimal_places=2, max_digits=12, validators=[MinValueValidator(Decimal('0.01'))])
     unit = MeasurementUnitFields()
+
+    GOUTTE_TO_ML = Decimal('0.05')  # 1 GOUTTE = 0,05 ml
     
     __packagings_needed: list()
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__update_packagings_needed()
+        # print("RECIPE_QUANTITY", self, "created")
         
     def _call_define_measurement_unit(self):
         self._define_measurement_unit(self.unit)
         
     def __update_packagings_needed(self):
         self.__packagings_needed = list()
-        quantity_to_handle = self._quantity
+        quantity_to_handle = self.quantity_to_calculate
+
         while quantity_to_handle > 0:
             pack_to_add = self.product.get_smallest_satisfying_packaging(quantity=quantity_to_handle)
+            # print("quantity to handle :", quantity_to_handle, " of ML. get_smallest_satisfying_packaging found :", pack_to_add)
             if pack_to_add:
                 self.__packagings_needed.append(pack_to_add)
                 quantity_to_handle -= pack_to_add.quantity
@@ -504,16 +517,21 @@ class RecipeQuantity(models.Model, MeasurementUnitModelBased):
     @property
     def quantity(self):
         return self._quantity
-    
+
+    @property
+    def quantity_to_calculate(self):
+        return self._quantity if self.unit is not MeasurementUnit.GOUTTE else self._quantity * RecipeQuantity.GOUTTE_TO_ML
+
     @quantity.setter
     def quantity(self, new_quantity):
         self._quantity = new_quantity
         self.__update_packagings_needed()
         
     def __str__(self):
-        message = "{} {} of {}".format(
+        message = "{} {}{} of {}".format(
             self._quantity,
-            self.unit,
+            self.measurement_unit.name,
+            " ({} of ML)".format(self.quantity_to_calculate) if self.measurement_unit is MeasurementUnit.GOUTTE else "",
             self.product
         )
         return message
@@ -521,9 +539,9 @@ class RecipeQuantity(models.Model, MeasurementUnitModelBased):
 
 class Packaging(models.Model, MeasurementUnitModelBased):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="packagings")
-    quantity = models.PositiveIntegerField()
+    quantity = models.DecimalField(decimal_places=2, max_digits=12, validators=[MinValueValidator(Decimal('0.01'))])
     unit = MeasurementUnitFields()
-    price = models.FloatField(null=False)
+    price = models.DecimalField(null=False, decimal_places=2, max_digits=12, validators=[MinValueValidator(Decimal('0.01'))])
 
     def _call_define_measurement_unit(self):
         self._define_measurement_unit(self.unit)
@@ -602,7 +620,7 @@ class RecipeBasket(models.Model):
 class UserStock(models.Model, MeasurementUnitModelBased):
     user = models.ForeignKey(AromaUser, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    quantity = models.FloatField(null=False, default=0)
+    quantity = models.DecimalField(null=False, default=Decimal('0'), decimal_places=2, max_digits=12, validators=[MinValueValidator(Decimal('0.01'))])
     unit = MeasurementUnitFields()
 
     def _call_define_measurement_unit(self):

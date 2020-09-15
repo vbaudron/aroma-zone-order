@@ -1,3 +1,4 @@
+from decimal import Decimal
 from enum import Enum
 from openpyxl import load_workbook
 import os
@@ -164,13 +165,17 @@ class Command(BaseCommand):
                 break
             print("row :", row)
             category = Category.objects.get(label=row[0].lower())
+            density = Decimal(format(row[2], ".2f")) if row[2] else row[2]
+            ml_to_goutte = Decimal(format(row[3], ".2f")) if row[3] else row[3]
             Product.objects.create(
                 label=row[1].lower(),
                 category=category,
                 containers_flag=ContainerFlag.NONE.value,
                 product_details_flag=ProductDetailsFlag.NONE.value,
                 properties_flag=PropertiesFlag.NONE.value,
-                url=row[2]
+                url=row[4],
+                density=density,
+                ml_to_goutte=ml_to_goutte
             )
         print("populate products DONE")
 
@@ -216,7 +221,7 @@ class Command(BaseCommand):
             print("row :", row)
             recipe = Recipe.objects.get(label=row[0])
             product = Product.objects.get(label=row[1])
-            quantity = row[2]
+            quantity = Decimal(format(row[2], ".2f"))
             unit = MeasurementUnit[row[3].upper()]
             RecipeQuantity.objects.create(
                 recipe=recipe,
@@ -224,6 +229,7 @@ class Command(BaseCommand):
                 _quantity=quantity,
                 unit=unit
             )
+
         print("populate quantities DONE")
 
 
@@ -241,8 +247,8 @@ class Command(BaseCommand):
             print("row :", row)
             product = Product.objects.get(label=row[0])
             unit = MeasurementUnit[row[1].upper()]
-            quantity = row[2]
-            price = row[3]
+            quantity = format(row[2], ".2f")
+            price = Decimal(format(row[3], ".2f"))
             Packaging.objects.create(
                 product=product,
                 quantity=quantity,

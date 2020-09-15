@@ -1,3 +1,4 @@
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -7,7 +8,7 @@ from myapp.models import Category, ContainerFlag, FunctionnalCategoryChoice, Mea
     ProductBasket, RecipeBasket
 
 FAKE_URL = "www.google.fr"
-DEFAULT_PRICE = 8
+DEFAULT_PRICE = Decimal("8.00")
 
 
 # =======
@@ -464,6 +465,43 @@ class RecipeTest(TestCase):
         self.assertEqual(self.packaging_2, packaging_result[2])
         self.assertEqual(self.packaging_2, packaging_result[3])
 
+    def test_get_all_packaging_needed__one_product_two_recipes_quantity(self):
+        self.product_1.drop_to_ml = Decimal('0.05')
+        self.product_1.drop_to_ml = Decimal('0.05')
+
+      #  self.product_1.save()
+
+        rq_drop = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product_1,
+            _quantity=20,
+            unit=MeasurementUnit.GOUTTE
+        )
+
+
+        rq_gram = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product_1,
+            _quantity=20,
+            unit=MeasurementUnit.GRAMS
+        )
+
+        rq_ml = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product_1,
+            _quantity=20,
+            unit=MeasurementUnit.ML
+        )
+
+        # Not all added
+
+        #
+
+
+
+        packaging_result = self.recipe.get_all_packaging_needed()
+
+
     # ---------------------
     # add_product_to_basket
     # ---------------------
@@ -599,7 +637,9 @@ class RecipeQuantityTest(TestCase):
             category=category,
             containers_flag=ContainerFlag.NONE.value,
             product_details_flag=ProductDetailsFlag.NONE.value,
-            url=FAKE_URL
+            url=FAKE_URL,
+            density=Decimal('1.50'),
+            ml_to_goutte=Decimal('0.05')
         )
 
     def setUp(self):
@@ -620,11 +660,12 @@ class RecipeQuantityTest(TestCase):
         self.packaging_2 = Packaging.objects.create(
             product=self.product,
             quantity=20,
-            unit=MeasurementUnit.ML,
+            unit=MeasurementUnit.ML.value,
             price=DEFAULT_PRICE
         )
 
     def test_packaging_needed__only_one(self):
+
         self.create_packaging_data_for_packaging_needed()
 
         # INFERIOR --> Only one packaging needed and shoudl be PACKAGING_1
@@ -632,7 +673,7 @@ class RecipeQuantityTest(TestCase):
             recipe=self.recipe,
             product=self.product,
             _quantity=5,
-            unit=MeasurementUnit.ML
+            unit=MeasurementUnit.ML.value
         )
 
         self.assertEqual(1, len(rq.packagings_needed))
@@ -643,7 +684,7 @@ class RecipeQuantityTest(TestCase):
             recipe=self.recipe,
             product=self.product,
             _quantity=self.packaging_1.quantity,
-            unit=MeasurementUnit.ML
+            unit=MeasurementUnit.ML.value
         )
 
         self.assertEqual(1, len(rq.packagings_needed))
@@ -758,6 +799,71 @@ class RecipeQuantityTest(TestCase):
         self.assertEqual(2, len(rq.packagings_needed))
         self.assertEqual(self.packaging_2, rq.packagings_needed[0])
         self.assertEqual(self.packaging_2, rq.packagings_needed[1])
+
+    def test_packaging_needed_drop(self):
+        print("\n\ntest_packaging_needed_drop  --> START\n")
+
+        product_drop_to_ml = Decimal('0.05')
+
+        quantity = 10 * product_drop_to_ml
+        self.packaging_1 = Packaging.objects.create(
+            product=self.product,
+            quantity=Decimal(format(quantity, ".2f")),
+            unit=MeasurementUnit.ML,
+            price=DEFAULT_PRICE
+        )
+
+        quantity = 20 * product_drop_to_ml
+        self.packaging_2 = Packaging.objects.create(
+            product=self.product,
+            quantity=Decimal(format(quantity, ".2f")),
+            unit=MeasurementUnit.ML,
+            price=DEFAULT_PRICE
+        )
+        print("packaging 1 :", self.packaging_1)
+        print("packaging 2 :", self.packaging_2)
+
+        # INFERIOR --> Only one packaging needed and shoudl be PACKAGING_1
+        print("-- INFERIOR --")
+        quantity = 5
+        rq = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product,
+            _quantity=Decimal(format(quantity, ".2f")),
+            unit=MeasurementUnit.GOUTTE
+        )
+        print("Packaging Need :", rq.packagings_needed)
+
+        self.assertEqual(1, len(rq.packagings_needed))
+        self.assertEqual(self.packaging_1, rq.packagings_needed[0])
+
+        # EQUAL --> Only one packaging needed and shoudl be PACKAGING_1
+        print("-- EQUAL --")
+        quantity = 10
+        rq = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product,
+            _quantity=Decimal(format(quantity, ".2f")),
+            unit=MeasurementUnit.GOUTTE
+        )
+
+        self.assertEqual(1, len(rq.packagings_needed))
+        self.assertEqual(self.packaging_1, rq.packagings_needed[0])
+
+        # SUPERIOR --> Only one packaging needed and shoudl be PACKAGING_2
+        print("-- SUPERIOR --")
+        quantity = 15
+        rq = RecipeQuantity.objects.create(
+            recipe=self.recipe,
+            product=self.product,
+            _quantity=Decimal(format(quantity, ".2f")),
+            unit=MeasurementUnit.GOUTTE
+        )
+        print("----------------------------------> rq._quantity type :", type(rq.quantity))
+
+        self.assertEqual(1, len(rq.packagings_needed))
+        self.assertEqual(self.packaging_2, rq.packagings_needed[0])
+        print("\ntest_packaging_needed_goutte  --> END\n\n")
 
 
 # ==========
@@ -1032,13 +1138,4 @@ class AromaUserTest(TestCase):
             self.assertEqual(basket[i].packaging, expected_packaging[i])
 
         print("\ntest_optimize_basket__recipe_1_x2_recipe_2 --> END\n\n")
-
-
-
-
-
-
-
-
-
 
